@@ -63,9 +63,14 @@ pub enum Error {
     /// Network error
     Network(network::Error),
     /// The header hash is not below the target
+    BadProofOfWork,
+    /// The header hash is not below the target
+    #[deprecated(since="0.19.0", note="please use `BadProofOfWork` instead")]
     SpvBadProofOfWork,
     /// The `target` field of a block header did not match the expected difficulty
+    #[deprecated(since="0.19.0", note="please use `BadProofOfWork` instead")]
     SpvBadTarget,
+
 }
 
 impl fmt::Display for Error {
@@ -73,7 +78,7 @@ impl fmt::Display for Error {
         match *self {
             Error::Encode(ref e) => fmt::Display::fmt(e, f),
             Error::Network(ref e) => fmt::Display::fmt(e, f),
-            Error::SpvBadProofOfWork | Error::SpvBadTarget => f.write_str(error::Error::description(self)),
+            Error::BadProofOfWork | Error::SpvBadProofOfWork | Error::SpvBadTarget => f.write_str(error::Error::description(self)),
         }
     }
 }
@@ -83,7 +88,7 @@ impl error::Error for Error {
         match *self {
             Error::Encode(ref e) => Some(e),
             Error::Network(ref e) => Some(e),
-            Error::SpvBadProofOfWork | Error::SpvBadTarget => None
+            Error::BadProofOfWork | Error::SpvBadProofOfWork | Error::SpvBadTarget => None
         }
     }
 
@@ -91,6 +96,7 @@ impl error::Error for Error {
         match *self {
             Error::Encode(ref e) => e.description(),
             Error::Network(ref e) => e.description(),
+            Error::BadProofOfWork => "target not attained",
             Error::SpvBadProofOfWork => "target correct but not attained",
             Error::SpvBadTarget => "target incorrect",
         }

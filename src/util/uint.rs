@@ -381,6 +381,10 @@ impl Uint256 {
         let &Uint256(data) = self;
         Uint128([data[0], data[1]])
     }
+
+    pub fn get_compact(negative: bool) -> u32 {
+
+    }
 }
 
 #[cfg(test)]

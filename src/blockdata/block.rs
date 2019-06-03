@@ -23,7 +23,7 @@
 use bitcoin_hashes::{sha256d, Hash};
 
 use util;
-use util::Error::{SpvBadTarget, SpvBadProofOfWork};
+use util::Error::{BadProofOfWork, SpvBadTarget, SpvBadProofOfWork};
 use util::hash::{BitcoinHash, MerkleRoot, bitcoin_merkle_root};
 use util::uint::Uint256;
 use consensus::encode::Encodable;
@@ -163,10 +163,43 @@ impl BlockHeader {
         (max_target(network) / self.target()).low_u64()
     }
 
+
+    /// Confirm that the proof-of-work meets the required target.
+    pub fn check_pow(&self, target: &Uint256) -> Result<(), util::Error> {
+        use byteorder::{ByteOrder, LittleEndian};
+
+        let data: [u8; 32] = self.bitcoin_hash().into_inner();
+        let mut ret = [0u64; 4];
+        LittleEndian::read_u64_into(&data, &mut ret);
+        let hash = &Uint256(ret);
+        if hash <= target { Ok(()) } else { Err(SpvBadProofOfWork) }
+    }
+
+    /// Confirm that the proof-of-work meets the required target.
+    pub fn validate_target(&self) -> Result<(), util::Error> {
+        let target = &self.target();
+        self.check_pow(target)
+    }
+
     /// Performs an SPV validation of a block, which confirms that the proof-of-work
     /// is correct, but does not verify that the transactions are valid or encoded
     /// correctly.
+
+    #[inline(always)]
     pub fn spv_validate(&self, required_target: &Uint256) -> Result<(), util::Error> {
+        // Check if supplied target matches the block target for backward compatibility with the
+        // deprected spv_validate
+        let target = &self.target();
+        if target != required_target {
+            return Err(SpvBadTarget);
+        }
+        self.validate_target()
+    }
+
+    /// Performs an SPV validation of a block, which confirms that the proof-of-work
+    /// is correct, but does not verify that the transactions are valid or encoded
+    /// correctly.
+    pub fn spv_validate_old(&self, required_target: &Uint256) -> Result<(), util::Error> {
         use byteorder::{ByteOrder, LittleEndian};
 
         let target = &self.target();
@@ -215,6 +248,8 @@ mod tests {
     use blockdata::block::{Block, BlockHeader};
     use consensus::encode::{deserialize, serialize};
     use util::hash::MerkleRoot;
+    use util::uint::Uint256;
+    use util::Error::SpvBadTarget;
 
     #[test]
     fn block_test() {
@@ -278,6 +313,32 @@ mod tests {
         let header: BlockHeader = deserialize(&some_header).expect("Can't deserialize correct block header");
 
         assert_eq!(header.bits, BlockHeader::compact_target_from_u256(&header.target()));
+    }
+    
+    #[test]
+    fn header_validate_target() {
+        // Block 500_000
+        let header_bytes = hex_decode("000000201929eb850a74427d0440cf6b518308837566cd6d0662790000000000000000001f6231ed3de07345b607ec2a39b2d01bec2fe10dfb7f516ba4958a42691c95316d0a385a459600185599fc5c").unwrap();
+        let header = deserialize(&header_bytes);
+        assert!(header.is_ok());
+        let header: BlockHeader = header.unwrap();
+
+        let block_target = header.target();
+        let low_target = Uint256([0, 0, 0, 1]);
+        let hi_target = Uint256([0, 0, 1, 0]);
+
+        // Deprecated spv_validate behaviour
+        assert!(header.spv_validate(&block_target).is_ok());
+        assert!(header.spv_validate(&low_target).is_err());
+        assert!(header.spv_validate(&hi_target).is_err());
+
+
+        eprintln!("low_target = {:?}", low_target);
+        eprintln!("hi_target = {:?}", hi_target);
+        
+        assert!(false);
+
+
     }
 }
 
